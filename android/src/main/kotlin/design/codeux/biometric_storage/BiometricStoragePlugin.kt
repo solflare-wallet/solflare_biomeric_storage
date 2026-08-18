@@ -44,12 +44,53 @@ enum class CanAuthenticateResponse(val code: Int) {
     ErrorHwUnavailable(BiometricManager.BIOMETRIC_ERROR_HW_UNAVAILABLE),
     ErrorNoBiometricEnrolled(BiometricManager.BIOMETRIC_ERROR_NONE_ENROLLED),
     ErrorNoHardware(BiometricManager.BIOMETRIC_ERROR_NO_HARDWARE),
+    ErrorSecurityUpdateRequired(BiometricManager.BIOMETRIC_ERROR_SECURITY_UPDATE_REQUIRED),
+    ErrorUnsupported(BiometricManager.BIOMETRIC_ERROR_UNSUPPORTED),
     ErrorStatusUnknown(BiometricManager.BIOMETRIC_STATUS_UNKNOWN),
     ErrorPasscodeNotSet(-99),
+
+    // canAuthenticate() can leak this sensor error code. BiometricManager does not declare it,
+    // so the value comes from BiometricPrompt, where it is the same number (7).
+    // androidx 1.4.0 converts it to BIOMETRIC_SUCCESS, because the sensor and the enrollment are
+    // both fine and the lockout ends by itself. A caller which only needs a yes/no answer can
+    // treat this value as Success. A caller which shows a message should say "try again later".
+    ErrorLockout(BiometricPrompt.ERROR_LOCKOUT),
+
+    // The next two codes are not declared in androidx.biometric 1.2.0-alpha05, so the literal
+    // values are used. androidx.biometric 1.4.0-alpha07 declares both.
+    //
+    // Code 21 exists in the API 35 framework and became public SDK API in API 36. androidx marks
+    // it @RestrictTo(LIBRARY), and androidx 1.4.0+ converts it to BIOMETRIC_ERROR_HW_UNAVAILABLE
+    // in ErrorUtils.toKnownStatusCodeForCanAuthenticate. The pinned 1.2.0-alpha05 has no such
+    // conversion, so the raw framework code reaches here. A bump of androidx.biometric would
+    // therefore stop ErrorNotEnabledForApps from ever firing.
+    //
+    // Code 20 is only returned when the caller requests the IDENTITY_CHECK authenticator.
+    // This plugin requests BIOMETRIC_STRONG or BIOMETRIC_WEAK, so it is mapped for safety only.
+    // https://github.com/authpass/biometric_storage/issues/148
+    ErrorIdentityCheckNotActive(20),
+    ErrorNotEnabledForApps(21),
     ;
 
     override fun toString(): String {
         return "CanAuthenticateResponse.${name}: $code"
+    }
+
+    companion object {
+        /**
+         * Maps a [BiometricManager] status code to this enum.
+         *
+         * A capability check must never throw. A future Android release can add codes which
+         * this enum does not declare, so an unknown code degrades to [ErrorStatusUnknown].
+         */
+        fun fromCode(code: Int): CanAuthenticateResponse =
+            values().firstOrNull { it.code == code }
+                ?: ErrorStatusUnknown.also {
+                    logger.warn {
+                        "Unknown canAuthenticate response code {$code} " +
+                            "(available: ${values().contentToString()})"
+                    }
+                }
     }
 }
 
@@ -327,14 +368,7 @@ class BiometricStoragePlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
         val response = biometricManager.canAuthenticate(
             BIOMETRIC_STRONG or BIOMETRIC_WEAK
         )
-        return CanAuthenticateResponse.values().firstOrNull { it.code == response }
-            ?: throw Exception(
-                "Unknown response code {$response} (available: ${
-                    CanAuthenticateResponse
-                        .values()
-                        .contentToString()
-                }"
-            )
+        return CanAuthenticateResponse.fromCode(response)
     }
 
     @UiThread

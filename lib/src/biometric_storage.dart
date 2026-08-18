@@ -21,6 +21,33 @@ enum CanAuthenticateResponse {
   /// Passcode is not set (iOS/MacOS) or no user credentials (on macos).
   errorPasscodeNotSet,
 
+  /// Android only. Too many failed attempts, so the sensor is locked for a short
+  /// time. The hardware and the enrollment are both fine, and the lockout ends by
+  /// itself. Tell the user to try again later, or offer the passcode.
+  errorLockout,
+
+  /// Android only. A security vulnerability was found in the biometric sensor.
+  /// Biometrics stay off until the user updates the device.
+  /// https://developer.android.com/reference/androidx/biometric/BiometricManager#BIOMETRIC_ERROR_SECURITY_UPDATE_REQUIRED
+  errorSecurityUpdateRequired,
+
+  /// Android only. Identity Check is not active, so the requested authenticator
+  /// combination is unavailable. Only returned when the caller asks for the
+  /// `IDENTITY_CHECK` authenticator, which this plugin does not do.
+  /// https://developer.android.com/reference/androidx/biometric/BiometricManager#BIOMETRIC_ERROR_IDENTITY_CHECK_NOT_ACTIVE
+  errorIdentityCheckNotActive,
+
+  /// Android only. The value exists in the API 35 framework and is public SDK API
+  /// from API 36. The device has usable biometrics, but the
+  /// user turned off biometric verification for apps. The user can turn it on
+  /// again in the system settings.
+  ///
+  /// `androidx.biometric` marks this code library-internal, and version 1.4.0 and
+  /// later converts it to `errorHwUnavailable` before a caller sees it. It only
+  /// reaches you while the plugin pins `androidx.biometric 1.2.0-alpha05`.
+  /// https://developer.android.com/reference/androidx/biometric/BiometricManager#BIOMETRIC_ERROR_NOT_ENABLED_FOR_APPS
+  errorNotEnabledForApps,
+
   /// Used on android if the status is unknown.
   /// https://developer.android.com/reference/androidx/biometric/BiometricManager#BIOMETRIC_STATUS_UNKNOWN
   statusUnknown,
@@ -35,6 +62,13 @@ const _canAuthenticateMapping = {
   'ErrorNoBiometricEnrolled': CanAuthenticateResponse.errorNoBiometricEnrolled,
   'ErrorNoHardware': CanAuthenticateResponse.errorNoHardware,
   'ErrorPasscodeNotSet': CanAuthenticateResponse.errorPasscodeNotSet,
+  'ErrorLockout': CanAuthenticateResponse.errorLockout,
+  'ErrorSecurityUpdateRequired':
+      CanAuthenticateResponse.errorSecurityUpdateRequired,
+  'ErrorIdentityCheckNotActive':
+      CanAuthenticateResponse.errorIdentityCheckNotActive,
+  'ErrorNotEnabledForApps': CanAuthenticateResponse.errorNotEnabledForApps,
+  'ErrorUnsupported': CanAuthenticateResponse.unsupported,
   'ErrorUnknown': CanAuthenticateResponse.unsupported,
   'ErrorStatusUnknown': CanAuthenticateResponse.statusUnknown,
 };
@@ -270,7 +304,10 @@ class MethodChannelBiometricStorage extends BiometricStorage {
       final response = await _channel.invokeMethod<String>('canAuthenticate');
       final ret = _canAuthenticateMapping[response];
       if (ret == null) {
-        throw StateError('Invalid response from native platform. {$response}');
+        // A capability check must never throw. A newer native side may return
+        // a response which this dart version does not know yet.
+        _logger.warning('Unmapped response from native platform. {$response}');
+        return CanAuthenticateResponse.statusUnknown;
       }
       return ret;
     }
