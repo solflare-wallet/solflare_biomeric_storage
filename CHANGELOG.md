@@ -1,3 +1,26 @@
+## 5.0.1+solflare.1
+
+Solflare fork of upstream `5.0.1`.
+Upstream issue: https://github.com/authpass/biometric_storage/issues/148
+
+* Android: `canAuthenticate()` no longer throws for status codes which the
+  `CanAuthenticateResponse` enum does not declare. Android returns
+  `BIOMETRIC_ERROR_NOT_ENABLED_FOR_APPS` (21, added in API 35) when the user turns
+  off biometric verification for apps. That code crossed the method channel as a
+  `PlatformException` and every caller failed.
+* Android: add `ErrorLockout` for the sensor lockout code (7). `BiometricManager` does not
+  declare it, but `canAuthenticate()` can return it, and androidx 1.4.0 converts it to
+  `BIOMETRIC_SUCCESS`. Before this change it threw like code 21.
+* Android: add the missing status codes `BIOMETRIC_ERROR_SECURITY_UPDATE_REQUIRED`
+  (15), `BIOMETRIC_ERROR_UNSUPPORTED` (-2),
+  `BIOMETRIC_ERROR_IDENTITY_CHECK_NOT_ACTIVE` (20) and
+  `BIOMETRIC_ERROR_NOT_ENABLED_FOR_APPS` (21). All four values are confirmed against
+  `androidx.biometric:biometric:1.4.0-alpha07`, which declares them.
+* Android: an unmapped status code now degrades to `ErrorStatusUnknown` and logs
+  a warning, so a future Android release cannot crash the capability check.
+* Dart: an unmapped response name no longer throws a `StateError`. It degrades to
+  `CanAuthenticateResponse.statusUnknown` and logs a warning.
+
 ## 5.0.1
 
 * Add option for iOS/MacOS to allow non-biometric authentication (`darwinBiometricOnly`) #101
