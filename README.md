@@ -1,5 +1,18 @@
 # biometric_storage
 
+> ### Solflare fork
+>
+> Forked from [`authpass/biometric_storage`](https://github.com/authpass/biometric_storage)
+> at tag `v5.0.1`, the version the Solflare wallet uses.
+>
+> **Difference against upstream:** `canAuthenticate()` never throws. Android 16
+> (API 36) added biometric status codes which the upstream enum does not declare,
+> so the capability check crashed. See
+> [upstream issue #148](https://github.com/authpass/biometric_storage/issues/148).
+>
+> Consume this fork as a git dependency, pinned to a tag or a full commit SHA.
+> Do not publish it to pub.dev.
+
 [![Pub](https://img.shields.io/pub/v/biometric_storage?color=green)](https://pub.dev/packages/biometric_storage/)
 
 Encrypted file store, **optionally** secured by biometric lock 
