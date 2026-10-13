@@ -138,8 +138,9 @@ class BiometricStoragePlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
         const val PARAM_WRITE_CONTENT = "content"
         const val PARAM_ANDROID_PROMPT_INFO = "androidPromptInfo"
 
-        // One thread for all engines in the process, so their calls run in arrival order, as they
-        // did on the main thread. It is never shut down, because another engine can still use it.
+        // One thread for all engines in the process, so the calls that run on it keep their arrival
+        // order across engines, as on the main thread. It is never shut down, because another
+        // engine can still use it.
         private val executor: ExecutorService = Executors.newSingleThreadExecutor { runnable ->
             Thread(runnable, "biometric_storage").apply { isDaemon = true }
         }
@@ -313,13 +314,7 @@ class BiometricStoragePlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
                     }
                 }
                 "delete" -> withStorage {
-                    if (!options.authenticationRequired) {
-                        replyFromExecutor { if (exists()) deleteFile() else false }
-                    } else if (exists()) {
-                        result.success(deleteFile())
-                    } else {
-                        result.success(false)
-                    }
+                    replyFromExecutor { if (exists()) deleteFile() else false }
                 }
                 "write" -> withStorage {
                     if (!options.authenticationRequired) {
