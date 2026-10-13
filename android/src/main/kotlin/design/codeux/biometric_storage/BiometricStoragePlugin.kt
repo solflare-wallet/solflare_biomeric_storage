@@ -138,9 +138,13 @@ class BiometricStoragePlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
         const val PARAM_WRITE_CONTENT = "content"
         const val PARAM_ANDROID_PROMPT_INFO = "androidPromptInfo"
 
+        // One thread for all engines in the process, so their calls run in arrival order, as they
+        // did on the main thread. It is never shut down, because another engine can still use it.
+        private val executor: ExecutorService = Executors.newSingleThreadExecutor { runnable ->
+            Thread(runnable, "biometric_storage").apply { isDaemon = true }
+        }
     }
 
-    private val executor: ExecutorService by lazy { Executors.newSingleThreadExecutor() }
     private val handler: Handler by lazy { Handler(Looper.getMainLooper()) }
 
 
@@ -159,7 +163,6 @@ class BiometricStoragePlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
     }
 
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
-        executor.shutdown()
     }
 
     override fun onMethodCall(call: MethodCall, result: Result) {
