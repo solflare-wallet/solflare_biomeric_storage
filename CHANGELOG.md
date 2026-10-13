@@ -7,6 +7,10 @@
 * Android: calls for one file still complete in the order they arrive, because the background
   thread is a single-thread executor. A failure still reaches Dart as a `PlatformException` with
   the code `Unexpected Error`.
+* Android: all plugin instances in a process share this background thread, a daemon thread
+  named `biometric_storage`. With several Flutter engines in one process, their calls run in
+  arrival order, as they did on the main thread, so two engines cannot read and write one file at
+  the same time. The plugin no longer shuts the thread down when an engine detaches.
 * Android: storage files with `authenticationRequired: true` keep their current behavior.
 
 ## 5.0.1+solflare.1
