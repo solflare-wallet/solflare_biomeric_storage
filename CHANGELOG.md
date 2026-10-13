@@ -1,3 +1,14 @@
+## 5.0.1+solflare.2
+
+* Android: `read`, `write` and `delete` for a storage file with `authenticationRequired: false` now
+  run on the plugin's background thread. Before this change they ran on the main thread: the
+  Keystore key lookup, `Cipher.init`, `doFinal`, the key generation on the first write, and the file
+  I/O. A slow Keystore blocked the main thread for the full call and could cause an ANR.
+* Android: calls for one file still complete in the order they arrive, because the background
+  thread is a single-thread executor. A failure still reaches Dart as a `PlatformException` with
+  the code `Unexpected Error`.
+* Android: storage files with `authenticationRequired: true` keep their current behavior.
+
 ## 5.0.1+solflare.1
 
 Solflare fork of upstream `5.0.1`.
