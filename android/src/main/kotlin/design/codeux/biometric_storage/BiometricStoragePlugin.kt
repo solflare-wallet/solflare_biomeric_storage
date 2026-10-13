@@ -204,15 +204,27 @@ class BiometricStoragePlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
 
             }
 
+            // The executor has one thread, so calls run in arrival order and exists() sees earlier writes.
+            @UiThread
+            fun replyFromExecutor(@WorkerThread body: () -> Any?) {
+                executor.execute {
+                    try {
+                        val ret = body()
+                        ui(resultError) { result.success(ret) }
+                    } catch (e: Exception) {
+                        logger.error(e) { "Error while processing method call '${call.method}'" }
+                        ui(resultError) {
+                            result.error("Unexpected Error", e.message, e.toCompleteString())
+                        }
+                    }
+                }
+            }
+
             @UiThread
             fun BiometricStorageFile.withAuth(
                 mode: CipherMode,
                 @WorkerThread cb: BiometricStorageFile.(cipher: Cipher?) -> Unit
             ) {
-                if (!options.authenticationRequired) {
-                    return cb(null)
-                }
-
                 fun cipherForMode() = when (mode) {
                     CipherMode.Encrypt -> cipherForEncrypt()
                     CipherMode.Decrypt -> cipherForDecrypt()
@@ -284,7 +296,9 @@ class BiometricStoragePlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
                     null
                 )
                 "read" -> withStorage {
-                    if (exists()) {
+                    if (!options.authenticationRequired) {
+                        replyFromExecutor { if (exists()) readFile(null) else null }
+                    } else if (exists()) {
                         withAuth(CipherMode.Decrypt) {
                             val ret = readFile(
                                     it,
@@ -296,16 +310,26 @@ class BiometricStoragePlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
                     }
                 }
                 "delete" -> withStorage {
-                    if (exists()) {
+                    if (!options.authenticationRequired) {
+                        replyFromExecutor { if (exists()) deleteFile() else false }
+                    } else if (exists()) {
                         result.success(deleteFile())
                     } else {
                         result.success(false)
                     }
                 }
                 "write" -> withStorage {
-                    withAuth(CipherMode.Encrypt) {
-                        writeFile(it, requiredArgument(PARAM_WRITE_CONTENT))
-                        ui(resultError) { result.success(true) }
+                    if (!options.authenticationRequired) {
+                        val content = requiredArgument<String>(PARAM_WRITE_CONTENT)
+                        replyFromExecutor {
+                            writeFile(null, content)
+                            true
+                        }
+                    } else {
+                        withAuth(CipherMode.Encrypt) {
+                            writeFile(it, requiredArgument(PARAM_WRITE_CONTENT))
+                            ui(resultError) { result.success(true) }
+                        }
                     }
                 }
                 else -> result.notImplemented()
