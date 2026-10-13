@@ -1,17 +1,25 @@
 ## 5.0.1+solflare.2
 
-* Android: `read`, `write` and `delete` for a storage file with `authenticationRequired: false` now
-  run on the plugin's background thread. Before this change they ran on the main thread: the
-  Keystore key lookup, `Cipher.init`, `doFinal`, the key generation on the first write, and the file
-  I/O. A slow Keystore blocked the main thread for the full call and could cause an ANR.
-* Android: calls for one file still complete in the order they arrive, because the background
-  thread is a single-thread executor. A failure still reaches Dart as a `PlatformException` with
-  the code `Unexpected Error`.
-* Android: all plugin instances in a process share this background thread, a daemon thread
-  named `biometric_storage`. With several Flutter engines in one process, their calls run in
-  arrival order, as they did on the main thread, so two engines cannot read and write one file at
-  the same time. The plugin no longer shuts the thread down when an engine detaches.
-* Android: storage files with `authenticationRequired: true` keep their current behavior.
+* Android: `read` and `write` for a storage file with `authenticationRequired: false`, and `delete`
+  for every storage file, now run on a background thread. Before this change they ran on the main
+  thread. There they did the Keystore key lookup, `Cipher.init`, `doFinal` and the file I/O. A first
+  write also generated the key, and a delete removed it. A slow Keystore blocked the main thread for
+  the full call, which can cause an ANR.
+* Android: all plugin instances in a process share this background thread, a daemon thread named
+  `biometric_storage`. The calls that run on it complete in the order they arrive. This order also
+  holds across several Flutter engines in one process, as on the main thread. The plugin no longer
+  shuts the thread down when an engine detaches.
+* Android: for the calls that moved, a failure still reaches Dart as a `PlatformException` with the
+  code `Unexpected Error`.
+* Android: a storage file with `authenticationRequired: true` keeps three steps on the main thread,
+  as before. The order of the background thread does not cover them:
+  * the inline read or write of a file with a validity window
+    (`authenticationValidityDurationSeconds` above -1), when the key works without a prompt,
+  * the cipher setup before a biometric prompt, which deletes the file and the key when the key is
+    permanently invalidated,
+  * the `exists()` check before a read.
+
+  After a prompt, the read or write runs on the background thread, as before.
 
 ## 5.0.1+solflare.1
 
