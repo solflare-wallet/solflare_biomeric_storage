@@ -138,9 +138,14 @@ class BiometricStoragePlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
         const val PARAM_WRITE_CONTENT = "content"
         const val PARAM_ANDROID_PROMPT_INFO = "androidPromptInfo"
 
+        // One thread for all engines in the process, so the calls that run on it keep their arrival
+        // order across engines, as on the main thread. It is never shut down, because another
+        // engine can still use it.
+        private val executor: ExecutorService = Executors.newSingleThreadExecutor { runnable ->
+            Thread(runnable, "biometric_storage").apply { isDaemon = true }
+        }
     }
 
-    private val executor: ExecutorService by lazy { Executors.newSingleThreadExecutor() }
     private val handler: Handler by lazy { Handler(Looper.getMainLooper()) }
 
 
@@ -159,7 +164,6 @@ class BiometricStoragePlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
     }
 
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
-        executor.shutdown()
     }
 
     override fun onMethodCall(call: MethodCall, result: Result) {
@@ -204,15 +208,27 @@ class BiometricStoragePlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
 
             }
 
+            // The executor has one thread, so calls run in arrival order and exists() sees earlier writes.
+            @UiThread
+            fun replyFromExecutor(@WorkerThread body: () -> Any?) {
+                executor.execute {
+                    try {
+                        val ret = body()
+                        ui(resultError) { result.success(ret) }
+                    } catch (e: Exception) {
+                        logger.error(e) { "Error while processing method call '${call.method}'" }
+                        ui(resultError) {
+                            result.error("Unexpected Error", e.message, e.toCompleteString())
+                        }
+                    }
+                }
+            }
+
             @UiThread
             fun BiometricStorageFile.withAuth(
                 mode: CipherMode,
                 @WorkerThread cb: BiometricStorageFile.(cipher: Cipher?) -> Unit
             ) {
-                if (!options.authenticationRequired) {
-                    return cb(null)
-                }
-
                 fun cipherForMode() = when (mode) {
                     CipherMode.Encrypt -> cipherForEncrypt()
                     CipherMode.Decrypt -> cipherForDecrypt()
@@ -284,7 +300,9 @@ class BiometricStoragePlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
                     null
                 )
                 "read" -> withStorage {
-                    if (exists()) {
+                    if (!options.authenticationRequired) {
+                        replyFromExecutor { if (exists()) readFile(null) else null }
+                    } else if (exists()) {
                         withAuth(CipherMode.Decrypt) {
                             val ret = readFile(
                                     it,
@@ -296,16 +314,20 @@ class BiometricStoragePlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
                     }
                 }
                 "delete" -> withStorage {
-                    if (exists()) {
-                        result.success(deleteFile())
-                    } else {
-                        result.success(false)
-                    }
+                    replyFromExecutor { if (exists()) deleteFile() else false }
                 }
                 "write" -> withStorage {
-                    withAuth(CipherMode.Encrypt) {
-                        writeFile(it, requiredArgument(PARAM_WRITE_CONTENT))
-                        ui(resultError) { result.success(true) }
+                    if (!options.authenticationRequired) {
+                        val content = requiredArgument<String>(PARAM_WRITE_CONTENT)
+                        replyFromExecutor {
+                            writeFile(null, content)
+                            true
+                        }
+                    } else {
+                        withAuth(CipherMode.Encrypt) {
+                            writeFile(it, requiredArgument(PARAM_WRITE_CONTENT))
+                            ui(resultError) { result.success(true) }
+                        }
                     }
                 }
                 else -> result.notImplemented()

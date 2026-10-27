@@ -5,10 +5,18 @@
 > Forked from [`authpass/biometric_storage`](https://github.com/authpass/biometric_storage)
 > at tag `v5.0.1`, the version the Solflare wallet uses.
 >
-> **Difference against upstream:** `canAuthenticate()` never throws. Android 16
-> (API 36) added biometric status codes which the upstream enum does not declare,
-> so the capability check crashed. See
-> [upstream issue #148](https://github.com/authpass/biometric_storage/issues/148).
+> **Differences against upstream:**
+>
+> - `canAuthenticate()` never throws. Android 16 (API 36) added biometric status
+>   codes which the upstream enum does not declare, so the capability check
+>   crashed. See
+>   [upstream issue #148](https://github.com/authpass/biometric_storage/issues/148).
+> - Android: `read` and `write` of a file with `authenticationRequired: false`,
+>   and every `delete`, run on one background thread instead of the main thread.
+>   All plugin instances in the process share this thread, so these calls keep
+>   their arrival order. Files with `authenticationRequired: true` keep some steps
+>   on the main thread, for example the inline read or write of a file with a
+>   validity window. The CHANGELOG entry of 5.0.1+solflare.2 lists them.
 >
 > Consume this fork as a git dependency, pinned to a tag or a full commit SHA.
 > Do not publish it to pub.dev.
