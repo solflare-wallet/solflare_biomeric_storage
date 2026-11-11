@@ -18,6 +18,7 @@
 
 package design.codeux.biometric_storage
 
+import android.os.Build
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -25,6 +26,7 @@ import java.io.File
 import java.nio.charset.Charset
 import java.security.KeyStore
 import java.security.KeyStoreException
+import java.security.ProviderException
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
@@ -176,8 +178,34 @@ class CryptographyManagerImpl(
             KeyProperties.KEY_ALGORITHM_AES,
             ANDROID_KEYSTORE
         )
-        keyGenerator.init(keyGenParams)
-        return keyGenerator.generateKey()
+        try {
+            keyGenerator.init(keyGenParams)
+            return keyGenerator.generateKey()
+        } catch (e: ProviderException) {
+            // Some devices report the StrongBox feature but reject a StrongBox key, for example with
+            // KeyStoreException "Not implemented" (code -100). OEMs surface this either as
+            // StrongBoxUnavailableException, which is a ProviderException, or as a plain
+            // ProviderException. The error is deterministic, so retry once without StrongBox.
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P || !keyGenParams.isStrongBoxBacked) {
+                throw e
+            }
+            logger.warn(e) { "StrongBox key generation failed for $realKeyName, retrying without StrongBox." }
+            deleteKeyEntry(keyStore, realKeyName)
+            paramsBuilder.setIsStrongBoxBacked(false)
+            keyGenerator.init(paramsBuilder.build())
+            return keyGenerator.generateKey()
+        }
+    }
+
+    /** Removes an entry that a failed generation can leave behind, so the retry starts clean. */
+    private fun deleteKeyEntry(keyStore: KeyStore, realKeyName: String) {
+        try {
+            if (keyStore.containsAlias(realKeyName)) {
+                keyStore.deleteEntry(realKeyName)
+            }
+        } catch (e: KeyStoreException) {
+            logger.warn(e) { "Unable to delete key from KeyStore $realKeyName before the StrongBox retry" }
+        }
     }
 
 }

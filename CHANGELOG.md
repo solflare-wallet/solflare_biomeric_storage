@@ -1,3 +1,11 @@
+## 5.0.1+solflare.3
+
+* Android: when a device reports StrongBox support but the Keystore rejects a StrongBox key, the key
+  is created again without StrongBox. Before this change the first write failed on these devices,
+  for example with `KeyStoreException: Not implemented (code -100)`, and the app could not save its
+  secure storage. Keys that exist already are not changed. The fallback catches
+  `ProviderException`, which also covers `StrongBoxUnavailableException`.
+
 ## 5.0.1+solflare.2
 
 * Android: `read` and `write` for a storage file with `authenticationRequired: false`, and `delete`
