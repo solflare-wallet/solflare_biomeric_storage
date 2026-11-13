@@ -1,3 +1,15 @@
+## 5.0.1+solflare.3
+
+* iOS: add Swift Package Manager support. Sources now live in
+  `ios/biometric_storage/`. The CocoaPods podspec still builds those sources.
+* iOS: the plugin class is `SwiftBiometricStoragePlugin`. Swift packages cannot
+  mix Swift and Objective-C in one target, so the Objective-C registration
+  shim is gone. Dart callers are unchanged.
+* Windows: require `win32` 5.15. Dart 3.14 does not compile 5.2. The cap stays
+  below 6.
+* The shared keychain implementation stays one file. macOS compiles it through a
+  symlink at `macos/Classes/BiometricStorageImpl.swift`.
+
 ## 5.0.1+solflare.2
 
 * Android: `read` and `write` for a storage file with `authenticationRequired: false`, and `delete`
